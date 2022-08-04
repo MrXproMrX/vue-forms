@@ -1,121 +1,119 @@
 <template>
   <div class="container">
-    <form class="card" @submit.prevent="submitHandler">
-      <h1>Анкета на Vue разработчика!</h1>
-     <!-- <div class="form-control" :class="{invalid: errors.name}">
-        <label for="name">Как тебя зовут?</label>
-        <input
-            type="text"
-            id="name"
-            placeholder="Введи имя"
-            v-model.trim="name"
-        >
-        <small v-if="errors.name">{{ errors.name }}</small>
-      </div> -->
-
-      <app-input
-        placeholder="Введи имя"
-        :error="errors.name"
-        label="Как тебя зовут?"
-        v-model:value.trim="name"
-      ></app-input>
+    <app-alert  :alert="alert" @close="alert = null"></app-alert>
+    <form class="card" @submit.prevent="createPerson">
+      <h2>Работа с базой данных</h2>
 
       <div class="form-control">
-        <label for="age">Выбери возраст</label>
-        <input
-            type="number"
-            id="age"
-            max="70"
-            v-model.number="age"
-        >
+        <label for="name">Введите имя</label>
+        <input type="text" id="name" v-model.trim="name">
       </div>
 
-      <div class="form-control">
-        <label for="city">Твой город</label>
-        <select id="city" v-model="city">
-          <option value="spb">Санкт-Петербург</option>
-          <option value="msk">Москва</option>
-          <option value="kzn">Казань</option>
-          <option value="nsk">Новосибирск</option>
-        </select>
-      </div>
-
-      <div class="form-checkbox">
-        <span class="label">Готов к переезду в Токио?</span>
-        <div class="checkbox">
-          <label><input type="radio" v-model="relocate" name="trip" value="yes" /> Да</label>
-        </div>
-
-        <div class="checkbox">
-          <label><input type="radio" v-model="relocate" name="trip" value="no" /> Нет</label>
-        </div>
-      </div>
-
-      <div class="form-checkbox">
-        <span class="label">Что знаешь во Vue?</span>
-        <div class="checkbox">
-          <label><input type="checkbox" v-model="skills" name="skills" value="vuex" /> Vuex</label>
-        </div>
-        <div class="checkbox">
-          <label><input type="checkbox" v-model="skills" name="skills" value="cli" /> Vue CLI</label>
-        </div>
-        <div class="checkbox">
-          <label><input type="checkbox" v-model="skills" name="skills" value="router" /> Vue Router</label>
-        </div>
-      </div>
-
-      <div class="form-checkbox">
-        <span class="label">Правила нашей компании</span>
-        <div class="checkbox">
-          <label><input type="checkbox" v-model="agree" /> С правилами согласен</label>
-        </div>
-      </div>
-
-      <button type="submit" class="btn primary">Отправить</button>
+      <button class="btn primary" :disabled="name.length === 0">Создать человека</button>
     </form>
+
+    <app-loader v-if="loader"></app-loader>
+
+    <app-people-list v-else :people="people" @load="LoadPeople" @remove="removePerson"></app-people-list>
   </div>
 </template>
 
 <script>
-  import AppInput from './AppInput'
+import AppPeopleList from '@/AppPeopleList.vue';
+import axios from 'axios';
+import AppAlert from '@/AppAlert.vue';
+import AppLoader from '@/AppLoader.vue';
   export default {
-    data() {
-      return {
-        name: '',
-        age: 18,
-        city: 'spb',
-        relocate: 'yes',
-        skills: [],
-        agree: false,
-        errors: {
-          name: null
-        }
+    data(){
+      return{ 
+        name:'',
+        people:[],
+        alert:null,
+        loader: false
       }
     },
-    components: {AppInput},
-    methods: {
-      formIsValid() {
-        let isValid = true
 
-        if (this.name.length === 0) {
-          this.errors.name = 'Имя не может быть пустым'
-          isValid = false
-        } else {
-          this.errors.name = null
+    mounted(){
+      this.LoadPeople()
+    },
+
+    components:{
+      AppPeopleList, 
+      AppAlert,
+      AppLoader,
+    },
+
+    // Запрос api
+
+    methods:{
+      async createPerson() {
+      const response = await fetch('https://vue-with-ht-default-rtdb.firebaseio.com/people.json', {
+        method: 'POST',
+
+        headers: {
+          'Content-Type': 'application/json'
+        },
+
+        body: JSON.stringify({
+          firstName: this.name
+        })
+      })
+
+      const firebaseData = await response.json()
+
+      this.people.push({
+        firstName: this.name,
+        id: firebaseData.name
+      })
+
+      this.name = ''
+    },
+
+    
+    // Список ползволтел api
+
+
+      async LoadPeople(){
+        try{
+          this.loader = true
+          const {data} = await axios.get('https://vue-with-ht-default-rtdb.firebaseio.com/people.json')
+          if(!data){
+            throw new Error('Список людей пуст')
+          }
+          
+          this.people  = Object.keys(data).map(key=>{
+          return{
+            id: key,
+           ...data[key]
+          }
+          })
+
+        this.loader = false
+        }catch(e){
+          this.alert = {
+            type:'danger',
+            title:'Ошибка!',
+            text: e.message
+          } 
+          this.loader = false
+          console.log(e.message);
         }
-
-        return isValid
       },
-      submitHandler() {
-        if (this.formIsValid()) {
-          console.group('Form Data')
-          console.log('Name:', this.name)
-          console.log('Age:', this.age)
-          console.log('City:', this.city)
-          console.log('To Tokyo:', this.relocate)
-          console.log('Skills:', this.skills)
-          console.log('Agree:', this.agree)
-          console.groupEnd()
+
+      // Удалит ползволтел
+
+      async removePerson(id){
+        try{
+          const name = this.people.find(person => person.id === id).firstName
+          await axios.delete(`https://vue-with-ht-default-rtdb.firebaseio.com/people/${id}.json`)
+          this.people = this.people.filter(people => people.id !== id)
+          this.alert = {
+            type:'primary',
+            title: 'Успешно!',
+            text: `Пользвател с именем "${name}" был удалеон`
+          }
+        }catch(e){
+
         }
       }
     }
@@ -123,11 +121,5 @@
 </script>
 
 <style>
-  .form-control small {
-    color: #e53935;
-  }
 
-  .form-control.invalid input {
-    border-color: #e53935;
-  }
 </style>
